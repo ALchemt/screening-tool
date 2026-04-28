@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel, Field
 
@@ -133,6 +134,74 @@ def _state_values(graph, config: dict) -> dict:
 
 
 # ─── Endpoints ──────────────────────────────────────────────────────────────
+
+LANDING_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Screening Tool — AI Recruiter Assistant</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         max-width: 720px; margin: 4rem auto; padding: 0 1.5rem; line-height: 1.55; }
+  h1 { font-size: 1.6rem; margin-bottom: .25rem; }
+  .lede { color: #888; margin-top: 0; }
+  code { background: rgba(127,127,127,.15); padding: .1rem .35rem; border-radius: 4px; }
+  pre { background: rgba(127,127,127,.1); padding: 1rem; border-radius: 6px; overflow-x: auto; }
+  a { color: #4a90e2; }
+  ul { padding-left: 1.2rem; }
+  hr { border: none; border-top: 1px solid rgba(127,127,127,.25); margin: 2rem 0; }
+  table { border-collapse: collapse; margin: .5rem 0; }
+  td { padding: .15rem .8rem .15rem 0; }
+</style>
+</head>
+<body>
+<h1>Screening Tool — AI Recruiter Assistant</h1>
+<p class="lede">LangGraph agent + LLM-as-judge for technical recruiter screening. REST API only.</p>
+
+<p>This is a backend service. It has no UI. To explore:</p>
+<ul>
+  <li><a href="/docs">/docs</a> — interactive Swagger UI (try every endpoint live)</li>
+  <li><a href="/jds">/jds</a> — list 8 available job descriptions</li>
+  <li><a href="/healthz">/healthz</a> — liveness check</li>
+  <li><a href="/redoc">/redoc</a> — alt. API documentation</li>
+</ul>
+
+<h2>Quick screening flow</h2>
+<pre>BASE=https://alchemt-screening-tool.hf.space
+
+# 1. Start a session for "Agentic AI Developer"
+curl -s -X POST $BASE/screening/start \\
+  -H "Content-Type: application/json" \\
+  -d '{"jd_id":"jd_005","max_questions":3}'
+
+# 2. Submit answer (returns next question or final report)
+curl -s -X POST $BASE/screening/respond \\
+  -H "Content-Type: application/json" \\
+  -d '{"session_id":"sess_...","response":"I built ..."}'
+
+# 3. Fetch report when done
+curl -s $BASE/screening/sess_.../report</pre>
+
+<h2>Project</h2>
+<table>
+<tr><td><strong>Source</strong></td><td><a href="https://github.com/ALchemt/screening-tool">github.com/ALchemt/screening-tool</a></td></tr>
+<tr><td><strong>Eval results</strong></td><td><a href="https://github.com/ALchemt/screening-tool/blob/main/runs/eval_v2_summary.md">runs/eval_v2_summary.md</a> — 32 sessions, v1→v2 comparison</td></tr>
+<tr><td><strong>Sibling projects</strong></td><td><a href="https://alchemt-rag-qa.hf.space">P1 RAG Q&amp;A</a> · <a href="https://alchemt-llm-eval.hf.space">P2 LLM Eval</a></td></tr>
+</table>
+
+<hr>
+<p><small>Stack: LangGraph 1.x · ChromaDB · FastAPI · Langfuse · OpenRouter (gpt-4o-mini agent + claude-sonnet-4.5 judge).</small></p>
+</body>
+</html>
+"""
+
+
+@app.get("/", response_class=HTMLResponse)
+def root():
+    return LANDING_HTML
+
 
 @app.get("/healthz")
 def healthz():
