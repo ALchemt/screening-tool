@@ -1,0 +1,24 @@
+# Agent framework
+langgraph>=0.2.50
+langgraph-checkpoint-sqlite>=2.0.0  # SqliteSaver moved out in langgraph 1.x
+langchain-core>=0.3.0
+
+# Observability — pin to v3.x line (4.x has API changes around openai integration)
+langfuse>=3.0.0,<4.0.0
+
+# API layer
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.9.0
+
+# RAG stack
+chromadb>=0.5.0
+openai>=1.50.0  # provider-agnostic client (used via OpenRouter)
+
+# Utils
+python-dotenv>=1.0.0
+pyyaml>=6.0.0
+rank-bm25>=0.2.2  # hybrid retrieval fallback
+
+# Dev / eval
+pytest>=8.0.0

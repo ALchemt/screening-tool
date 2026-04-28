@@ -1,0 +1,14 @@
+.env
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+data/checkpoints.sqlite
+data/checkpoints.sqlite-*
+data/_test_checkpoints.sqlite*
+data/chroma/
+runs/*.json
+runs/*.jsonl
+runs/*.csv
+!runs/.gitkeep
+.pytest_cache/

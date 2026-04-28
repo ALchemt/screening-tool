@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+data/checkpoints.sqlite*
+data/_test_checkpoints.sqlite*
+data/chroma/
+runs/
+tests/
+.git/
+.gitignore
+README_HF.md
+spec.md

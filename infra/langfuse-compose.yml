@@ -1,0 +1,70 @@
+# Langfuse self-host stack — Postgres + Clickhouse + Langfuse server.
+# Status: blueprint, not yet deployed. Currently using cloud.langfuse.com.
+#
+# Usage on a VPS with Docker + Caddy:
+#   1. cp .env.langfuse.example .env.langfuse
+#   2. fill secrets (NEXTAUTH_SECRET, SALT, ENCRYPTION_KEY — `openssl rand -hex 32`)
+#   3. docker compose -f langfuse-compose.yml --env-file .env.langfuse up -d
+#   4. point Caddy/Nginx at langfuse:3000 with HTTPS
+#   5. create org/project in UI, copy keys → set in HF Space secrets
+#
+# Why two databases: Langfuse uses Postgres for app state and Clickhouse for
+# event time-series. This is a 2.5GB RAM minimum stack — see Langfuse
+# self-hosting docs at https://langfuse.com/self-hosting.
+
+version: "3.9"
+
+services:
+  langfuse:
+    image: langfuse/langfuse:3
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-langfuse}:${POSTGRES_PASSWORD}@postgres:5432/langfuse
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      NEXTAUTH_URL: ${PUBLIC_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      SALT: ${SALT}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      TELEMETRY_ENABLED: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-langfuse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: langfuse
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-langfuse}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DEFAULT_USER: default
+      CLICKHOUSE_DEFAULT_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    volumes:
+      - ch_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pg_data:
+  ch_data:
