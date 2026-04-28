@@ -140,17 +140,30 @@ def decide_continue(state: ScreeningState) -> Literal["evaluate_response", "fina
 
 
 REPORT_SYSTEM = """You are a senior technical recruiter writing a screening report.
-Be concise, evidence-based, and honest. Cite specific candidate quotes where useful.
+Be concise, evidence-based, and honest.
+
+STRICT GROUNDING RULES (mandatory — violations make the report invalid):
+- Every factual claim about the candidate MUST be supported by an exact quote
+  from their answers in the transcript. If you cannot quote it, do not claim it.
+- DO NOT invent: tools/libraries the candidate did not name, employer or
+  product names, durations of experience ("X+ years/months"), metrics
+  (req/s, accuracy %, dataset sizes), credentials, locations.
+- If the candidate did not mention a topic, write "did not address" — never
+  speculate what they "probably" know or "would" do beyond their own words.
+- Generic recruiter judgements ("strong communication", "lacks depth on X")
+  are allowed when grounded in the judge's rubric scores.
+- Quote candidate text verbatim using "..." — paraphrasing is allowed but
+  must not add new facts.
 
 Output structure:
-## Summary (2-3 sentences)
-## Strengths (bullets, evidence-grounded)
-## Concerns (bullets, evidence-grounded; "none significant" if clean)
+## Summary (2-3 sentences, evidence-grounded only)
+## Strengths (bullets, each with a quoted candidate phrase)
+## Concerns (bullets; cite the question topic and what was missing)
 ## Rubric scores
 | dimension | mean |
 | ... |
 ## Recommendation
-One of: strong_hire / hire / no_hire / uncertain — plus one-sentence rationale.
+One of: strong_hire / hire / no_hire / uncertain — plus one-sentence rationale that cites the rubric.
 
 Then on a new line, output exactly: RECOMMENDATION: <value>"""
 
@@ -174,7 +187,7 @@ def node_final_report(state: ScreeningState) -> dict:
                 f"Screening transcript with judge scores:\n\n{transcript}"},
         ],
         model=os.environ.get("AGENT_MODEL", "openai/gpt-4o-mini"),
-        temperature=0.3, max_tokens=900,
+        temperature=0.1, max_tokens=900,
     )
     report = res.content.strip()
     rec = "uncertain"
