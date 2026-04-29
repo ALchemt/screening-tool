@@ -3,6 +3,8 @@
 > **Status:** Live (2026-04-29). MVP complete: RAG, LangGraph agent, FastAPI, eval suite, deployed on HF Spaces, full Langfuse instrumentation.
 > Part of [ai-portfolio](https://github.com/ALchemt) — Project 3 of 4.
 
+![demo](assets/demo.gif)
+
 **Live API:** https://alchemt-screening-tool.hf.space — interactive docs at [`/docs`](https://alchemt-screening-tool.hf.space/docs)
 
 B2B screening tool for technical recruiters. Loads a job description, runs a structured candidate interview through a LangGraph agent loop, evaluates answers with an LLM-as-judge against a rubric, and produces a hiring report. Full observability via Langfuse. REST API via FastAPI.
@@ -66,11 +68,11 @@ Run on 2026-04-28. Full breakdown in [`runs/eval_summary.md`](./runs/eval_summar
 | Question relevance (judge #2 vs JD) | ≥ 1.7/2 | **1.78/2** | ✅ |
 | Cost per session | < $0.10 | **$0.0199** | ✅ |
 | Latency p50 / p95 | p95 < 60s | **38s / 48s** | ✅ |
-| Hallucination rate (real, manual review) | < 5% | **~0-5% (after anti-halluc fix)** | ✅ |
-| Hallucination rate (raw judge #3) | — | **48% (over-strict — flags concern statements as halluc)** | — |
-| Judge–human agreement | ≥ 75% | _pending labelling_ | — |
+| Fabrication rate (judge v3, separated from concerns) | < 5% | **3.75% (6 / 160 questions)** | ✅ |
+| Fabrication rate (manual audit of v3-flagged) | < 2% | **~1.25% (2 / 160 — rest are spin/quote framing)** | ✅ |
+| Judge–human agreement (10 labelled exchanges) | ≥ 75% | **95.0% overall exact match** | ✅ |
 
-> Numbers are from eval **v2** (2026-04-29) after the anti-hallucination report-prompt iteration. v1 baseline (2026-04-28) had real fabrication rate ~20-25%; the v2 fix dropped it to near-zero. See [`runs/eval_v2_summary.md`](./runs/eval_v2_summary.md) for the full v1→v2 comparison and what the metric tells us about the eval framework itself.
+> Numbers are from eval **v2** report-prompt + **v3** judge-prompt (both 2026-04-29). v1 (2026-04-28) had ~20-25% real fabrication rate and a misleading 48% raw judge metric. v2 fixed the agent (real fabrications dropped near zero); v3 fixed the judge (separated honest "did not address X" concerns from positive fabrications). See [`runs/eval_v2_summary.md`](./runs/eval_v2_summary.md) for the v1 → v2 → v3 narrative and lessons.
 
 **Recommendation distribution across 32 sessions:**
 
@@ -81,9 +83,23 @@ Run on 2026-04-28. Full breakdown in [`runs/eval_summary.md`](./runs/eval_summar
 | weak (8) | 0 | 0 | 8 |
 | edge (8) | 1 | 0 | 7 |
 
-**What works (v2):** real fabrication rate near zero after anti-halluc prompt iteration; 100% precision on weak personas; uses full hire spectrum on strong personas (strong_hire / hire / uncertain split); 0 false positives on edge_lying persona; $0.02/session, p95 48s.
+**What works (v2 + v3):** real fabrication rate ~1.25% after anti-halluc agent prompt + judge separation; 100% precision on weak personas; uses full hire spectrum on strong personas (strong_hire / hire / uncertain split); 0 false positives on edge_lying persona; $0.02/session, p95 48s.
 
-**What's the new bottleneck:** the eval framework itself. The hallucination judge (judge #3) over-flags concern statements ("did not address X") as fabrications — its 48% raw rate is misleading. Manual review of flagged claims is required to get the real number. Next iteration: rewrite the judge prompt to distinguish fabrication from absence-of-evidence. v1 → v2 comparison and lessons in [`runs/eval_v2_summary.md`](./runs/eval_v2_summary.md).
+### Judge–human alignment
+
+Manually labelled 10 randomly sampled (session, exchange) pairs. For each, scored TA / D / C / RF on the same 0-2 rubric, then computed exact-match agreement vs the LLM judge.
+
+| Axis | Exact match | Mean abs diff |
+|---|---|---|
+| technical_accuracy | 100.0% | 0.00 |
+| depth | 90.0% | 0.10 |
+| communication | 90.0% | 0.10 |
+| red_flags | 100.0% | 0.00 |
+| **Overall** | **95.0%** | **0.05** |
+
+10 samples is small (CI ≈ ±15pp at 95%), so this is "not visibly miscalibrated" rather than proof of correctness. But the structure of disagreements is informative: judge is exact on hard binary calls (TA, RF) and only off-by-one on subjective ones (D, C). No disagreement was off-by-two.
+
+**Remaining judge limitations (honest):** v3 judge still over-flags two edge cases — direct quotes restated as strengths (judge admits in its own reasoning) and positive spin on weak answers ("solid Python understanding" when candidate said "haven't worked on REST APIs"). 4 of 6 v3 fabrications fall in these buckets. A 4-bucket classifier (fab / concern / judgement / spin) would clean this up, left as known limitation rather than over-engineering. See [`runs/eval_v2_summary.md`](./runs/eval_v2_summary.md).
 
 **Trade-off introduced by v2:** medium-level personas now all rated `no_hire` (0/8 hires vs 3/8 in v1) — anti-halluc rules made the agent over-conservative on partial-match candidates. Real cost; documented.
 
@@ -136,7 +152,7 @@ curl -s $BASE/screening/$SID/report | jq .recommendation
 
 ## Limitations
 
-- **Hallucination in reports (~20-25%)** — main known issue, see [eval_summary.md](./runs/eval_summary.md). Mitigation roadmap documented; not yet shipped.
+- **Hallucination in reports** — v1 was ~20-25%, v2 anti-halluc agent prompt + v3 judge separation brought real rate to ~1.25%. Remaining 4/6 judge-flagged fabs are direct-quote restating and positive-spin edge cases — see [eval_v2_summary.md](./runs/eval_v2_summary.md).
 - **Synthetic JDs and personas** — eval measures agreement with another LLM, not real human candidates
 - **Small JD corpus (8 documents)** — generalisation to non-AI/automation roles unknown
 - **No UI** — REST only (interactive `/docs` from FastAPI)

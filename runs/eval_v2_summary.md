@@ -71,3 +71,53 @@ v1 → v2:
 The bottleneck moved. v1's bottleneck was the agent (it was making things up). v2's bottleneck is the eval framework itself (the judge can't tell over-strict from over-loose reports apart from fabrications).
 
 This is the kind of finding that only shows up if you actually run an eval, look at the numbers AND read the failure cases. If I had only watched the headline `hallucination_rate_pct`, I'd report v2 as "fix didn't work" — false. The number didn't move because I was measuring the wrong thing.
+
+---
+
+## v3 — judge prompt rewrite (same day, 2026-04-29)
+
+To get the headline metric to actually mean something, I rewrote `JUDGE_HALLUC_SYSTEM` (`src/judge.py`) to classify each report claim into one of three buckets:
+
+- **FABRICATED** — positive factual claim with no support in the candidate's answers (the only thing that should count)
+- **CONCERN** — honest absence note ("did not address X", "lacks evidence of Y") — valid recruiter language
+- **JUDGEMENT** — generic recruiter assessment ("strong communication", "surface-level")
+
+Re-judged the same 32 v2 sessions (no candidate regeneration, just the new judge). Cost: $0.25.
+
+Results (`runs/eval_v2_v3_summary.json`):
+
+| | v2 raw judge | v3 separated judge |
+|---|---|---|
+| Fabrications counted | 47 | 6 |
+| **Fabrication rate** | **29.4%** | **3.75%** |
+| Concerns separated out | (none — folded into halluc count) | 127 |
+
+Manual audit of all 6 v3-flagged fabrications:
+
+| Session | Flagged | Verdict |
+|---|---|---|
+| jd_005/weak_b | "developed a chatbot... 30% reduction in response times" | **real fabrication** — agent turned hypothetical example into stated fact, invented metric |
+| jd_005/edge_evasive | direct quotes about TensorFlow / agent roles | **judge over-flag** — quotes appear verbatim in answers, judge admits this in reasoning but still classified as fab |
+| jd_007/weak_b | "solid understanding of building applications in Python" | **borderline** — positive spin on candidate's actual answer ("haven't worked on REST APIs"), not invented from scratch |
+
+**Real fabrication rate after v3 audit: ~1.25% (2 / 160 questions).**
+
+Honest takeaway: v3 metric (3.75%) is much closer to truth than v2 (29.4%), but the judge still over-flags direct-quote framing and positive-spin restating. A purer eval would need a 4-bucket classifier (fab / concern / judgement / spin) — leaving as known limitation rather than over-engineering.
+
+This is what landed in the README as the production metric.
+
+---
+
+## Judge–human alignment (2026-04-29)
+
+10 random (session, exchange) pairs from the v2 run, scored manually on the same 0-2 rubric, agreement vs the LLM judge:
+
+| Axis | Exact match | Mean abs diff |
+|---|---|---|
+| technical_accuracy | 100.0% | 0.00 |
+| depth | 90.0% | 0.10 |
+| communication | 90.0% | 0.10 |
+| red_flags | 100.0% | 0.00 |
+| **Overall** | **95.0%** | **0.05** |
+
+Read: judge is exact on hard binary calls (TA, RF) and off-by-one on subjective calls (D, C). No disagreement was off-by-two. n=10 is small (CI ≈ ±15pp) so the headline number is "not visibly miscalibrated" rather than proof of correctness. Raw labels in `runs/human_labels.jsonl`.

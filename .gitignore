@@ -1,5 +1,6 @@
 .env
 !.env.example
+!*.example
 .venv/
 __pycache__/
 *.pyc
@@ -11,4 +12,6 @@ runs/*.json
 runs/*.jsonl
 runs/*.csv
 !runs/.gitkeep
+!runs/eval_v2_v3_summary.json
+!runs/human_labels.jsonl
 .pytest_cache/

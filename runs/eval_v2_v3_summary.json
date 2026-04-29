@@ -1,0 +1,11 @@
+{
+  "n_sessions": 32,
+  "total_questions": 160,
+  "fabricated_total": 6,
+  "fabricated_per_session_mean": 0.188,
+  "fabricated_rate_pct": 3.75,
+  "concerns_total": 127,
+  "concerns_per_session_mean": 3.969,
+  "extra_eval_cost_usd": 0.2507,
+  "judge_prompt_version": "v3_separated_concerns"
+}

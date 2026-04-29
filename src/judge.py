@@ -80,25 +80,60 @@ to a job description. Score 0/1/2:
 Output strict JSON: {"score": int, "reasoning": "..."}"""
 
 
-JUDGE_HALLUC_SYSTEM = """You audit a screening report for hallucinations.
-Given the candidate's actual answers and the report, find every factual claim
-in the report about the candidate that is NOT supported by their answers.
+JUDGE_HALLUC_SYSTEM = """You audit a screening report and classify every
+factual claim about the candidate into one of three buckets.
 
-A claim is hallucinated if:
-- it attributes a tool/skill/project/metric to the candidate that they never mentioned
-- it invents specifics (numbers, names, dates) not in the answers
-- it asserts the candidate did or didn't do X without evidence in the answers
+Categories:
 
-Generic recruiter judgements ("strong communication", "lacks depth") are NOT
-hallucinations — only fabricated facts about the candidate count.
+1. FABRICATED — a positive factual claim about the candidate that has NO support
+   in their answers. Counts only if the report ASSERTS something the candidate
+   did/used/built/achieved that they did not actually say.
+   Examples:
+   - "Candidate used Pinecone in production" (they never mentioned Pinecone)
+   - "Candidate has 5 years of LangChain experience" (no number was given)
+   - "Built a chatbot for DataVision Inc." (no employer named)
+
+2. CONCERN — a negative observation about gaps or missing evidence.
+   THESE ARE NOT FABRICATIONS. They are honest disclaimers and must be
+   classified as concerns, not fabrications.
+   Examples:
+   - "Did not address evaluation methodology"
+   - "Did not demonstrate hands-on RAG experience"
+   - "Lacks evidence of production deployment"
+   - "No specifics on chunking strategy were provided"
+   - "Candidate did not mention vector databases"
+
+3. JUDGEMENT — generic recruiter assessments / value statements.
+   THESE ARE NOT FABRICATIONS.
+   Examples:
+   - "Strong communication"
+   - "Surface-level understanding"
+   - "Recommend lean hire"
+   - "Answers were structured and concise"
+
+Decision rule: when in doubt between FABRICATED and CONCERN, prefer CONCERN.
+A claim only counts as FABRICATED if the report invents a positive fact.
+Negative phrasings about absence ("did not", "lacks", "no evidence of") are
+ALWAYS concerns, never fabrications.
 
 Output strict JSON:
-{"hallucinated_claims": ["...", "..."], "count": int, "reasoning": "..."}"""
+{
+  "fabricated": ["exact quote from report", ...],
+  "concerns": ["exact quote from report", ...],
+  "count_fabricated": int,
+  "count_concerns": int,
+  "reasoning": "1-2 sentences"
+}"""
 
 
 def evaluate_report_hallucinations(*, report: str,
                                    exchanges: list[dict]) -> tuple[dict, float]:
-    """Judge №3 — count fabricated claims in screening report."""
+    """Judge №3 — classify report claims into fabricated/concerns/judgements.
+
+    Returns dict with keys: fabricated, concerns, count_fabricated,
+    count_concerns, reasoning. Backwards-compat keys 'count' and
+    'hallucinated_claims' mirror the fabricated bucket.
+    """
     model = os.environ.get("JUDGE_MODEL", "anthropic/claude-sonnet-4.5")
     transcript = "\n\n".join(
         f"Q: {e['question']}\nA: {e['response']}" for e in exchanges
@@ -110,9 +145,21 @@ def evaluate_report_hallucinations(*, report: str,
                 f"Candidate answers:\n{transcript}\n\n"
                 f"Generated report:\n{report}"},
         ],
-        model=model, temperature=0.0, max_tokens=600,
+        model=model, temperature=0.0, max_tokens=900,
     )
-    return data, res.cost_usd
+    fabricated = data.get("fabricated", []) or []
+    concerns = data.get("concerns", []) or []
+    out = {
+        "fabricated": fabricated,
+        "concerns": concerns,
+        "count_fabricated": int(data.get("count_fabricated", len(fabricated))),
+        "count_concerns": int(data.get("count_concerns", len(concerns))),
+        "reasoning": str(data.get("reasoning", "")).strip(),
+        # backwards-compat for older eval_metrics callers
+        "hallucinated_claims": fabricated,
+        "count": int(data.get("count_fabricated", len(fabricated))),
+    }
+    return out, res.cost_usd
 
 
 def evaluate_question_relevance(*, question: str, jd_text: str) -> tuple[dict, float]:
